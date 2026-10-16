@@ -5,6 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'counter_widgets.dart';
+import 'home_widgets.dart';
+import 'dhikr_target_choices.dart';
+import 'storage.dart';
+import 'reading_content.dart';
 
 void main() {
   runApp(const MyApp());
@@ -32,7 +36,38 @@ class MyApp extends StatelessWidget {
           outline: Color(0xFFB8C9BE),
         ),
         scaffoldBackgroundColor: const Color(0xFFF7F3EA),
-        fontFamily: 'Georgia',
+        fontFamily: 'Lato',
+        navigationBarTheme: NavigationBarThemeData(
+          iconTheme: WidgetStateProperty.resolveWith(
+            (states) => IconThemeData(
+              color: states.contains(WidgetState.selected)
+                  ? primaryGreen
+                  : secondaryInk,
+            ),
+          ),
+          labelTextStyle: WidgetStateProperty.resolveWith(
+            (states) => TextStyle(
+              fontFamily: 'Lato',
+              fontSize: 13,
+              color: states.contains(WidgetState.selected)
+                  ? inkGreen
+                  : secondaryInk,
+              fontWeight: states.contains(WidgetState.selected)
+                  ? FontWeight.bold
+                  : FontWeight.normal,
+            ),
+          ),
+        ),
+        chipTheme: ChipThemeData(
+          backgroundColor: const Color(0xFFF7F3EA),
+          selectedColor: const Color(0xFFDDE9DF),
+          side: const BorderSide(color: Color(0xFFB8C9BE)),
+          labelStyle: const TextStyle(fontFamily: 'Lato', color: inkGreen),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: const Color(0xFFE8F1EA),
@@ -58,9 +93,9 @@ class MyApp extends StatelessWidget {
           surfaceTintColor: Colors.transparent,
           elevation: 0,
           titleTextStyle: TextStyle(
-            fontFamily: 'Georgia',
+            fontFamily: 'Lato',
             fontSize: 20,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
             color: Color(0xFF193C35),
           ),
         ),
@@ -85,6 +120,11 @@ class MyApp extends StatelessWidget {
         textButtonTheme: TextButtonThemeData(
           style: TextButton.styleFrom(
             foregroundColor: const Color(0xFF1F5B4D),
+            disabledForegroundColor: const Color(0xFF687B71),
+            textStyle: const TextStyle(
+              fontFamily: 'Lato',
+              fontWeight: FontWeight.bold,
+            ),
             minimumSize: const Size(48, 48),
           ),
         ),
@@ -100,8 +140,45 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-      builder: (context, child) =>
-          Center(child: SizedBox(width: 600, child: child)),
+      builder: (context, child) => SafeArea(
+        top: false,
+        child: Center(
+          child: SizedBox(
+            width: 600,
+            child: Column(
+              children: [
+                ValueListenableBuilder<String?>(
+                  valueListenable: saves.error,
+                  builder: (context, message, _) => message == null
+                      ? const SizedBox.shrink()
+                      : Material(
+                          color: const Color(0xFFF7F3EA),
+                          child: SafeArea(
+                            bottom: false,
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                children: [
+                                  Text(
+                                    message,
+                                    style: const TextStyle(color: inkGreen),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => saves.error.value = null,
+                                    child: const Text('Dismiss'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                ),
+                Expanded(child: child!),
+              ],
+            ),
+          ),
+        ),
+      ),
       home: const AppShell(),
     );
   }
@@ -126,7 +203,6 @@ class _AppShellState extends State<AppShell> {
 
   void _select(int index) {
     setState(() => _index = index);
-    if (index == 0) _homeKey.currentState?._loadSavedProgress();
     if (index == 1) _dailyKey.currentState?._loadProgress();
     if (index == 2) _libraryKey.currentState?._loadDhikrs();
   }
@@ -176,7 +252,6 @@ class _TasbihHomePageState extends State<TasbihHomePage> {
   int? _target = 33;
   bool _isLoading = true;
   bool _canUndo = false;
-  bool _continuing = false;
   bool _milestoneSent = false;
   @override
   void initState() {
@@ -185,6 +260,7 @@ class _TasbihHomePageState extends State<TasbihHomePage> {
   }
 
   Future<void> _loadSavedProgress() async {
+    await saves.idle;
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
@@ -211,13 +287,17 @@ class _TasbihHomePageState extends State<TasbihHomePage> {
     _saveProgress();
   }
 
-  Future<void> _saveProgress() async {
+  Future<bool> _saveProgress() {
     final count = _count;
     final target = _target;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('tasbih_count', count);
-    await prefs.setBool('tasbih_free_count', target == null);
-    if (target != null) await prefs.setInt('tasbih_target', target);
+    return saves.run(() async {
+      final prefs = await SharedPreferences.getInstance();
+      await requireSave(prefs.setInt('tasbih_count', count));
+      await requireSave(prefs.setBool('tasbih_free_count', target == null));
+      if (target != null) {
+        await requireSave(prefs.setInt('tasbih_target', target));
+      }
+    });
   }
 
   void _undo() {
@@ -225,6 +305,7 @@ class _TasbihHomePageState extends State<TasbihHomePage> {
     setState(() {
       _count--;
       _canUndo = false;
+      _milestoneSent = _target != null && _count >= _target!;
     });
     _saveProgress();
   }
@@ -236,13 +317,13 @@ class _TasbihHomePageState extends State<TasbihHomePage> {
           title: 'Reset count?',
           message: 'Clear your current Tasbih count?',
           action: 'Reset',
-        ))
+        )) {
       return;
+    }
     if (!mounted) return;
     setState(() {
       _count = 0;
       _canUndo = false;
-      _continuing = false;
       _milestoneSent = false;
     });
     await _saveProgress();
@@ -251,7 +332,6 @@ class _TasbihHomePageState extends State<TasbihHomePage> {
   void _changeTarget(int? target) {
     setState(() {
       _target = target;
-      _continuing = false;
       _milestoneSent = target != null && _count >= target;
     });
     _saveProgress();
@@ -270,81 +350,71 @@ class _TasbihHomePageState extends State<TasbihHomePage> {
             child: Center(
               child: Text(
                 'ذكر',
-                style: TextStyle(color: Color(0xFFB6873D), fontSize: 25),
+                style: TextStyle(
+                  color: Color(0xFFB6873D),
+                  fontSize: 25,
+                  fontFamily: 'NotoNaskhArabic',
+                ),
               ),
             ),
           ),
         ],
       ),
       body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) => SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minHeight: (constraints.maxHeight - 40).clamp(
-                  0.0,
-                  double.infinity,
-                ),
+        child: SingleChildScrollView(
+          key: const ValueKey('home-scroll'),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const HomeWelcomeCard(),
+              const SizedBox(height: 18),
+              HomeTargetChoices(
+                target: _target,
+                onChanged: _changeTarget,
+                enabled: !_isLoading,
               ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+              const SizedBox(height: 20),
+              CounterSurface(
+                count: _count,
+                target: _target,
+                loading: _isLoading,
+                onTap: _isLoading ? null : _incrementCounter,
+              ),
+              const SizedBox(height: 16),
+              if (_target != null)
+                Text(
+                  complete
+                      ? 'MashaAllah, target complete!'
+                      : '${_target! - _count} remaining',
+                  textAlign: TextAlign.center,
+                  semanticsLabel: complete ? 'Target complete' : null,
+                  style: const TextStyle(
+                    color: secondaryInk,
+                    fontSize: 15,
+                    height: 1.4,
+                  ),
+                ),
+              const SizedBox(height: 8),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 24,
+                runSpacing: 4,
                 children: [
-                  const Text(
-                    'Keep your heart present',
-                    style: TextStyle(
-                      color: secondaryInk,
-                      fontStyle: FontStyle.italic,
-                    ),
+                  TextButton.icon(
+                    onPressed: _canUndo ? _undo : null,
+                    icon: const Icon(Icons.undo, size: 20),
+                    label: const Text('Undo'),
                   ),
-                  const SizedBox(height: 20),
-                  TargetChoices(
-                    target: _target,
-                    onChanged: _changeTarget,
-                    enabled: !_isLoading,
+                  TextButton.icon(
+                    onPressed: _isLoading ? null : _resetCounter,
+                    icon: const Icon(Icons.refresh, size: 20),
+                    label: const Text('Reset count'),
                   ),
-                  const SizedBox(height: 28),
-                  CounterSurface(
-                    count: _count,
-                    target: _target,
-                    loading: _isLoading,
-                    onTap: _isLoading ? null : _incrementCounter,
-                  ),
-                  const SizedBox(height: 20),
-                  if (_target != null)
-                    Text(
-                      complete
-                          ? 'MashaAllah, target complete!'
-                          : '${_target! - _count} remaining',
-                      semanticsLabel: complete ? 'Target complete' : null,
-                      style: const TextStyle(color: secondaryInk, fontSize: 15),
-                    ),
-                  if (complete && !_continuing)
-                    TextButton(
-                      onPressed: () => setState(() => _continuing = true),
-                      child: const Text('Continue counting'),
-                    ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 24,
-                    children: [
-                      TextButton.icon(
-                        onPressed: _canUndo ? _undo : null,
-                        icon: const Icon(Icons.undo, size: 20),
-                        label: const Text('Undo'),
-                      ),
-                      TextButton.icon(
-                        onPressed: _isLoading ? null : _resetCounter,
-                        icon: const Icon(Icons.refresh, size: 20),
-                        label: const Text('Reset count'),
-                      ),
-                    ],
-                  ),
-                  const FeedbackControls(),
                 ],
               ),
-            ),
+              const FeedbackControls(),
+            ],
           ),
         ),
       ),
@@ -359,6 +429,7 @@ class ZikirItem {
     required this.arabic,
     this.transliteration,
     this.meaning,
+    this.recommendation,
     required this.target,
   });
 
@@ -367,6 +438,7 @@ class ZikirItem {
   final String arabic;
   final String? transliteration;
   final String? meaning;
+  final String? recommendation;
   final int? target;
 }
 
@@ -387,7 +459,6 @@ class _DhikrLibraryPageState extends State<DhikrLibraryPage> {
     super.dispose();
   }
 
-  static const _customNamesKey = 'custom_dhikr_names';
   static const _deletedIdsKey = 'deleted_dhikr_ids';
   static const _defaultDhikrs = [
     ZikirItem(
@@ -521,7 +592,8 @@ class _DhikrLibraryPageState extends State<DhikrLibraryPage> {
     ),
   ];
 
-  List<String> _customNames = [];
+  List<CustomDhikr> _customEntries = [];
+  bool _migrationNotice = false;
   Set<String> _deletedIds = {};
   Map<String, int> _targets = {};
   bool _isLoading = true;
@@ -534,11 +606,15 @@ class _DhikrLibraryPageState extends State<DhikrLibraryPage> {
 
   Future<void> _loadDhikrs() async {
     final preferences = await SharedPreferences.getInstance();
-    final customNames = preferences.getStringList(_customNamesKey) ?? [];
+    List<CustomDhikr> customEntries = [];
+    final loaded = await saves.run(() async {
+      customEntries = await DhikrStore.load(preferences);
+    });
+    if (!loaded) return;
     final deletedIds = preferences.getStringList(_deletedIdsKey) ?? [];
     final allDhikrs = [
       ..._defaultDhikrs.map((dhikr) => dhikr.id),
-      ...customNames.map(_customId),
+      ...customEntries.map((entry) => entry.id),
     ];
     final targets = <String, int>{};
     for (final id in allDhikrs) {
@@ -547,14 +623,14 @@ class _DhikrLibraryPageState extends State<DhikrLibraryPage> {
     }
     if (!mounted) return;
     setState(() {
-      _customNames = customNames;
+      _customEntries = customEntries;
+      _migrationNotice =
+          preferences.getBool(DhikrStore.migrationNoticeKey) ?? false;
       _deletedIds = deletedIds.toSet();
       _targets = targets;
       _isLoading = false;
     });
   }
-
-  String _customId(String name) => 'custom_$name';
 
   String _targetKeyFor(String id) => 'dhikr_target_$id';
 
@@ -564,8 +640,13 @@ class _DhikrLibraryPageState extends State<DhikrLibraryPage> {
     );
     if (name == null || !mounted) return;
     final preferences = await SharedPreferences.getInstance();
-    final updatedNames = [..._customNames, name];
-    await preferences.setStringList(_customNamesKey, updatedNames);
+    await saves.run(() async {
+      final entries = await DhikrStore.load(preferences);
+      await DhikrStore.write(preferences, [
+        ...entries,
+        CustomDhikr(newDhikrId(), name),
+      ]);
+    });
     await _loadDhikrs();
   }
 
@@ -575,20 +656,24 @@ class _DhikrLibraryPageState extends State<DhikrLibraryPage> {
       title: 'Delete dhikr?',
       message: 'Remove ${dhikr.name} and its saved count from your list?',
       action: 'Delete',
-    ))
+    )) {
       return;
+    }
     if (!mounted) return;
     final preferences = await SharedPreferences.getInstance();
-    if (_customNames.any((name) => _customId(name) == dhikr.id)) {
-      _customNames.removeWhere((name) => _customId(name) == dhikr.id);
-      await preferences.setStringList(_customNamesKey, _customNames);
-    } else {
-      _deletedIds.add(dhikr.id);
-      await preferences.setStringList(_deletedIdsKey, _deletedIds.toList());
-    }
-    await preferences.remove(_targetKeyFor(dhikr.id));
-    await preferences.remove('zikir_${dhikr.id}_count');
-    await preferences.remove('dhikr_free_${dhikr.id}');
+    await saves.run(() async {
+      if (_customEntries.any((entry) => entry.id == dhikr.id)) {
+        await DhikrStore.delete(preferences, dhikr.id);
+      } else {
+        final deleted = {..._deletedIds, dhikr.id};
+        await requireSave(
+          preferences.setStringList(_deletedIdsKey, deleted.toList()),
+        );
+        await requireSave(preferences.remove(_targetKeyFor(dhikr.id)));
+        await requireSave(preferences.remove('zikir_${dhikr.id}_count'));
+        await requireSave(preferences.remove('dhikr_free_${dhikr.id}'));
+      }
+    });
     await _loadDhikrs();
   }
 
@@ -607,12 +692,12 @@ class _DhikrLibraryPageState extends State<DhikrLibraryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final customDhikrs = _customNames.map(
-      (name) => ZikirItem(
-        id: _customId(name),
-        name: name,
-        arabic: name,
-        target: _targets[_customId(name)],
+    final customDhikrs = _customEntries.map(
+      (entry) => ZikirItem(
+        id: entry.id,
+        name: entry.name,
+        arabic: entry.name,
+        target: _targets[entry.id],
       ),
     );
     final allDhikrs = [
@@ -693,6 +778,14 @@ class _DhikrLibraryPageState extends State<DhikrLibraryPage> {
                       child: const Text('Clear search'),
                     ),
                 ],
+                if (_migrationNotice)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 16),
+                    child: Text(
+                      'Older entries with identical names shared progress. That saved progress was copied to each entry; they now count independently.',
+                      style: TextStyle(color: secondaryInk, height: 1.5),
+                    ),
+                  ),
                 ...dhikrs.map(_buildDhikrTile),
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
@@ -734,17 +827,18 @@ class _DhikrLibraryPageState extends State<DhikrLibraryPage> {
                     children: [
                       Text(
                         dhikr.arabic,
-                        textDirection: TextDirection.rtl,
-                        style: const TextStyle(
+                        textDirection: readingDirection(dhikr.arabic),
+                        style: TextStyle(
                           color: Color(0xFF193C35),
                           fontSize: 24,
                           height: 1.65,
                           fontWeight: FontWeight.w500,
-                          fontFamily: 'KFGQPC Uthmanic Script HAFS',
-                          fontFamilyFallback: [
-                            'Uthmanic Hafs',
-                            'Noto Naskh Arabic',
-                          ],
+                          fontFamily:
+                              readingDirection(dhikr.arabic) ==
+                                  TextDirection.rtl
+                              ? 'NotoNaskhArabic'
+                              : 'Lato',
+                          fontFamilyFallback: const ['Lato'],
                         ),
                       ),
                       if (dhikr.transliteration != null) ...[
@@ -855,8 +949,10 @@ class _AddDhikrPageState extends State<AddDhikrPage> {
             onSubmitted: (_) => _save(),
           ),
           const SizedBox(height: 22),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 8,
+            runSpacing: 8,
             children: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
@@ -896,37 +992,53 @@ const _prayerTimes = [
       ZikirItem(
         id: 'astaghfirullah',
         name: 'Astaghfirullah',
-        arabic: 'أستغفر الله',
+        arabic: 'أَسْتَغْفِرُ اللَّهَ',
+        transliteration: 'Astaghfirullah',
+        meaning: 'I seek forgiveness from Allah.',
+        recommendation: 'Three after prayer: Sahih Muslim 591.',
         target: 3,
       ),
       ZikirItem(
         id: 'subhanallah',
         name: 'SubhanAllah',
         arabic: 'سُبْحَانَ اللَّهِ',
+        transliteration: 'SubhanAllah',
+        meaning: 'Glory be to Allah.',
+        recommendation: '33 / 33 / 34 after prayer: Sahih Muslim 596a.',
         target: 33,
       ),
       ZikirItem(
         id: 'alhamdulillah',
         name: 'Alhamdulillah',
         arabic: 'الْحَمْدُ لِلَّهِ',
+        transliteration: 'Alhamdulillah',
+        meaning: 'All praise is due to Allah.',
+        recommendation: '33 / 33 / 34 after prayer: Sahih Muslim 596a.',
         target: 33,
       ),
       ZikirItem(
         id: 'allahu_akbar',
         name: 'Allahu Akbar',
         arabic: 'اللَّهُ أَكْبَرُ',
+        transliteration: 'Allahu Akbar',
+        meaning: 'Allah is the Greatest.',
+        recommendation: '33 / 33 / 34 after prayer: Sahih Muslim 596a.',
         target: 34,
       ),
       ZikirItem(
         id: 'ayatul_kursi',
         name: 'Ayatul Kursi',
-        arabic: 'آية الكرسي',
+        arabic: ayatulKursi,
+        recommendation: 'Quran 2:255. One recitation is this session goal; not restricted to these two prayers.',
         target: 1,
       ),
       ZikirItem(
         id: 'allahumma_ajirni',
         name: 'Allahumma ajirni minan-nar',
-        arabic: 'اللهم أجرني من النار',
+        arabic: 'اللَّهُمَّ أَجِرْنِي مِنَ النَّارِ',
+        transliteration: 'Allahumma ajirni minan-nar.',
+        meaning: 'O Allah, protect me from the Fire.',
+        recommendation: 'The report specifying seven repetitions (Abu Dawud 5079) is graded weak by Al-Albani. Kept as an optional personal goal.',
         target: 7,
       ),
     ],
@@ -938,25 +1050,37 @@ const _prayerTimes = [
       ZikirItem(
         id: 'zuhr_astaghfirullah',
         name: 'Astaghfirullah',
-        arabic: 'أستغفر الله',
+        arabic: 'أَسْتَغْفِرُ اللَّهَ',
+        transliteration: 'Astaghfirullah',
+        meaning: 'I seek forgiveness from Allah.',
+        recommendation: 'Three after prayer: Sahih Muslim 591.',
         target: 3,
       ),
       ZikirItem(
         id: 'zuhr_subhanallah',
         name: 'SubhanAllah',
         arabic: 'سُبْحَانَ اللَّهِ',
+        transliteration: 'SubhanAllah',
+        meaning: 'Glory be to Allah.',
+        recommendation: '33 / 33 / 34 after prayer: Sahih Muslim 596a.',
         target: 33,
       ),
       ZikirItem(
         id: 'zuhr_alhamdulillah',
         name: 'Alhamdulillah',
         arabic: 'الْحَمْدُ لِلَّهِ',
+        transliteration: 'Alhamdulillah',
+        meaning: 'All praise is due to Allah.',
+        recommendation: '33 / 33 / 34 after prayer: Sahih Muslim 596a.',
         target: 33,
       ),
       ZikirItem(
         id: 'zuhr_allahu_akbar',
         name: 'Allahu Akbar',
         arabic: 'اللَّهُ أَكْبَرُ',
+        transliteration: 'Allahu Akbar',
+        meaning: 'Allah is the Greatest.',
+        recommendation: '33 / 33 / 34 after prayer: Sahih Muslim 596a.',
         target: 34,
       ),
     ],
@@ -968,25 +1092,37 @@ const _prayerTimes = [
       ZikirItem(
         id: 'asr_astaghfirullah',
         name: 'Astaghfirullah',
-        arabic: 'أستغفر الله',
+        arabic: 'أَسْتَغْفِرُ اللَّهَ',
+        transliteration: 'Astaghfirullah',
+        meaning: 'I seek forgiveness from Allah.',
+        recommendation: 'Three after prayer: Sahih Muslim 591.',
         target: 3,
       ),
       ZikirItem(
         id: 'asr_subhanallah',
         name: 'SubhanAllah',
         arabic: 'سُبْحَانَ اللَّهِ',
+        transliteration: 'SubhanAllah',
+        meaning: 'Glory be to Allah.',
+        recommendation: '33 / 33 / 34 after prayer: Sahih Muslim 596a.',
         target: 33,
       ),
       ZikirItem(
         id: 'asr_alhamdulillah',
         name: 'Alhamdulillah',
         arabic: 'الْحَمْدُ لِلَّهِ',
+        transliteration: 'Alhamdulillah',
+        meaning: 'All praise is due to Allah.',
+        recommendation: '33 / 33 / 34 after prayer: Sahih Muslim 596a.',
         target: 33,
       ),
       ZikirItem(
         id: 'asr_allahu_akbar',
         name: 'Allahu Akbar',
         arabic: 'اللَّهُ أَكْبَرُ',
+        transliteration: 'Allahu Akbar',
+        meaning: 'Allah is the Greatest.',
+        recommendation: '33 / 33 / 34 after prayer: Sahih Muslim 596a.',
         target: 34,
       ),
     ],
@@ -998,37 +1134,53 @@ const _prayerTimes = [
       ZikirItem(
         id: 'maghrib_astaghfirullah',
         name: 'Astaghfirullah',
-        arabic: 'أستغفر الله',
+        arabic: 'أَسْتَغْفِرُ اللَّهَ',
+        transliteration: 'Astaghfirullah',
+        meaning: 'I seek forgiveness from Allah.',
+        recommendation: 'Three after prayer: Sahih Muslim 591.',
         target: 3,
       ),
       ZikirItem(
         id: 'maghrib_subhanallah',
         name: 'SubhanAllah',
         arabic: 'سُبْحَانَ اللَّهِ',
+        transliteration: 'SubhanAllah',
+        meaning: 'Glory be to Allah.',
+        recommendation: '33 / 33 / 34 after prayer: Sahih Muslim 596a.',
         target: 33,
       ),
       ZikirItem(
         id: 'maghrib_alhamdulillah',
         name: 'Alhamdulillah',
         arabic: 'الْحَمْدُ لِلَّهِ',
+        transliteration: 'Alhamdulillah',
+        meaning: 'All praise is due to Allah.',
+        recommendation: '33 / 33 / 34 after prayer: Sahih Muslim 596a.',
         target: 33,
       ),
       ZikirItem(
         id: 'maghrib_allahu_akbar',
         name: 'Allahu Akbar',
         arabic: 'اللَّهُ أَكْبَرُ',
+        transliteration: 'Allahu Akbar',
+        meaning: 'Allah is the Greatest.',
+        recommendation: '33 / 33 / 34 after prayer: Sahih Muslim 596a.',
         target: 34,
       ),
       ZikirItem(
         id: 'maghrib_ayatul_kursi',
         name: 'Ayatul Kursi',
-        arabic: 'آية الكرسي',
+        arabic: ayatulKursi,
+        recommendation: 'Quran 2:255. One recitation is this session goal; not restricted to these two prayers.',
         target: 1,
       ),
       ZikirItem(
         id: 'maghrib_allahumma_ajirni',
         name: 'Allahumma ajirni minan-nar',
-        arabic: 'اللهم أجرني من النار',
+        arabic: 'اللَّهُمَّ أَجِرْنِي مِنَ النَّارِ',
+        transliteration: 'Allahumma ajirni minan-nar.',
+        meaning: 'O Allah, protect me from the Fire.',
+        recommendation: 'The report specifying seven repetitions (Abu Dawud 5079) is graded weak by Al-Albani. Kept as an optional personal goal.',
         target: 7,
       ),
     ],
@@ -1040,25 +1192,37 @@ const _prayerTimes = [
       ZikirItem(
         id: 'isha_astaghfirullah',
         name: 'Astaghfirullah',
-        arabic: 'أستغفر الله',
+        arabic: 'أَسْتَغْفِرُ اللَّهَ',
+        transliteration: 'Astaghfirullah',
+        meaning: 'I seek forgiveness from Allah.',
+        recommendation: 'Three after prayer: Sahih Muslim 591.',
         target: 3,
       ),
       ZikirItem(
         id: 'isha_subhanallah',
         name: 'SubhanAllah',
         arabic: 'سُبْحَانَ اللَّهِ',
+        transliteration: 'SubhanAllah',
+        meaning: 'Glory be to Allah.',
+        recommendation: '33 / 33 / 34 after prayer: Sahih Muslim 596a.',
         target: 33,
       ),
       ZikirItem(
         id: 'isha_alhamdulillah',
         name: 'Alhamdulillah',
         arabic: 'الْحَمْدُ لِلَّهِ',
+        transliteration: 'Alhamdulillah',
+        meaning: 'All praise is due to Allah.',
+        recommendation: '33 / 33 / 34 after prayer: Sahih Muslim 596a.',
         target: 33,
       ),
       ZikirItem(
         id: 'isha_allahu_akbar',
         name: 'Allahu Akbar',
         arabic: 'اللَّهُ أَكْبَرُ',
+        transliteration: 'Allahu Akbar',
+        meaning: 'Allah is the Greatest.',
+        recommendation: '33 / 33 / 34 after prayer: Sahih Muslim 596a.',
         target: 34,
       ),
     ],
@@ -1102,6 +1266,7 @@ class _DailyZikirPageState extends State<DailyZikirPage> {
   }
 
   Future<void> _loadProgress() async {
+    await saves.idle;
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
@@ -1309,6 +1474,7 @@ class _PrayerZikirPageState extends State<PrayerZikirPage> {
   }
 
   Future<void> _loadCompleted() async {
+    await saves.idle;
     final preferences = await SharedPreferences.getInstance();
     final storedCustomZikirs = preferences.getStringList(_customKey) ?? [];
     final customZikirs = storedCustomZikirs.map(_decodeCustomZikir).toList();
@@ -1368,8 +1534,9 @@ class _PrayerZikirPageState extends State<PrayerZikirPage> {
       title: 'Delete dhikr?',
       message: 'Remove ${zikir.name} from this session?',
       action: 'Delete',
-    ))
+    )) {
       return;
+    }
     if (!mounted) return;
     final preferences = await SharedPreferences.getInstance();
     _customZikirs = _customZikirs.where((item) => item.id != zikir.id).toList();
@@ -1424,15 +1591,22 @@ class _PrayerZikirPageState extends State<PrayerZikirPage> {
         title: 'Reset session?',
         message: 'Clear all counts and completion in this prayer session?',
         action: 'Reset',
-      ))
+      )) {
         return;
+      }
       if (!mounted) return;
     }
     final preferences = await SharedPreferences.getInstance();
-    for (final zikir in [...widget.prayer.zikirs, ..._customZikirs]) {
-      await preferences.setBool('zikir_${zikir.id}_completed', false);
-      await preferences.setInt('zikir_${zikir.id}_count', 0);
-    }
+    final items = [...widget.prayer.zikirs, ..._customZikirs];
+    final saved = await saves.run(() async {
+      for (final zikir in items) {
+        await requireSave(
+          preferences.setBool('zikir_${zikir.id}_completed', false),
+        );
+        await requireSave(preferences.setInt('zikir_${zikir.id}_count', 0));
+      }
+    });
+    if (!saved) return;
     if (mounted) {
       setState(() {
         _completed.clear();
@@ -1453,7 +1627,7 @@ class _PrayerZikirPageState extends State<PrayerZikirPage> {
         padding: const EdgeInsets.fromLTRB(24, 14, 24, 30),
         children: [
           const Text(
-            'Complete each remembrance at your own pace.',
+            'Your progress stays saved until you reset this session.',
             style: TextStyle(color: Color(0xFF53685F), fontSize: 15),
           ),
           const SizedBox(height: 16),
@@ -1629,12 +1803,7 @@ class _AddDailyDhikrPageState extends State<AddDailyDhikrPage> {
     }
 
     Navigator.of(context).pop(
-      ZikirItem(
-        id: 'custom_${DateTime.now().microsecondsSinceEpoch}',
-        name: dhikr,
-        arabic: dhikr,
-        target: target,
-      ),
+      ZikirItem(id: newDhikrId(), name: dhikr, arabic: dhikr, target: target),
     );
   }
 
@@ -1688,8 +1857,10 @@ class _AddDailyDhikrPageState extends State<AddDailyDhikrPage> {
             ),
           ),
           const SizedBox(height: 22),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 8,
+            runSpacing: 8,
             children: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
@@ -1732,9 +1903,8 @@ class _ZikirTasbihPageState extends State<ZikirTasbihPage> {
   int? _target;
   bool _isLoading = true;
   bool _canUndo = false;
-  bool _continuing = false;
   bool _milestoneSent = false;
-  Future<void> _pendingSave = Future.value();
+
   @override
   void initState() {
     super.initState();
@@ -1743,6 +1913,7 @@ class _ZikirTasbihPageState extends State<ZikirTasbihPage> {
   }
 
   Future<void> _loadProgress() async {
+    await saves.idle;
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
@@ -1772,25 +1943,27 @@ class _ZikirTasbihPageState extends State<ZikirTasbihPage> {
     _saveProgress();
   }
 
-  Future<void> _saveProgress() {
+  Future<bool> _saveProgress() {
     final count = _count;
     final target = _target;
-    _pendingSave = _pendingSave.then((_) async {
+    return saves.run(() async {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_countKey, count);
+      await requireSave(prefs.setInt(_countKey, count));
       if (widget.allowTargetEditing) {
-        await prefs.setBool(_freeKey, target == null);
-        if (target != null && widget.targetKey != null)
-          await prefs.setInt(widget.targetKey!, target);
+        await requireSave(prefs.setBool(_freeKey, target == null));
+        if (target != null && widget.targetKey != null) {
+          await requireSave(prefs.setInt(widget.targetKey!, target));
+        }
       }
       if (!widget.allowTargetEditing) {
-        await prefs.setBool(
-          'zikir_${widget.zikir.id}_completed',
-          target != null && count >= target,
+        await requireSave(
+          prefs.setBool(
+            'zikir_${widget.zikir.id}_completed',
+            target != null && count >= target,
+          ),
         );
       }
     });
-    return _pendingSave;
   }
 
   void _undo() {
@@ -1798,6 +1971,7 @@ class _ZikirTasbihPageState extends State<ZikirTasbihPage> {
     setState(() {
       _count--;
       _canUndo = false;
+      _milestoneSent = _target != null && _count >= _target!;
     });
     _saveProgress();
   }
@@ -1810,32 +1984,28 @@ class _ZikirTasbihPageState extends State<ZikirTasbihPage> {
           title: 'Reset count?',
           message: 'Clear the count for this dhikr?',
           action: 'Reset',
-        ))
+        )) {
       return;
+    }
     if (!mounted) return;
     setState(() {
       _count = 0;
       _canUndo = false;
-      _continuing = false;
       _milestoneSent = false;
     });
     await _saveProgress();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('zikir_${widget.zikir.id}_completed', false);
   }
 
   void _changeTarget(int? target) {
     setState(() {
       _target = target;
-      _continuing = false;
       _milestoneSent = target != null && _count >= target;
     });
     _saveProgress();
   }
 
   Future<void> _complete({bool next = false}) async {
-    await _saveProgress();
-    if (!mounted) return;
+    if (!await _saveProgress() || !mounted) return;
     if (next && widget.onNext != null) {
       widget.onNext!();
     } else {
@@ -1849,101 +2019,98 @@ class _ZikirTasbihPageState extends State<ZikirTasbihPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Dhikr Tasbih')),
       body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) => SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-            child: Column(
-              children: [
-                Text(
-                  widget.zikir.name,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: inkGreen,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                ReadingText(
-                  arabic: widget.zikir.arabic,
-                  transliteration: widget.zikir.transliteration,
-                  meaning: widget.zikir.meaning,
-                ),
-                const SizedBox(height: 18),
-                if (widget.allowTargetEditing)
-                  TargetChoices(
-                    target: _target,
-                    onChanged: _changeTarget,
-                    enabled: !_isLoading,
-                  )
-                else
-                  Text(
-                    'Recommended target: $_target',
-                    style: const TextStyle(color: secondaryInk, fontSize: 14),
-                  ),
-                const SizedBox(height: 24),
-                CounterSurface(
-                  count: _count,
-                  target: _target,
-                  loading: _isLoading,
-                  label: widget.zikir.name,
-                  onTap: _isLoading ? null : _increment,
-                ),
+        child: SingleChildScrollView(
+          key: const ValueKey('dhikr-counter-scroll'),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          child: Column(
+            // Tight horizontal constraints keep every section on the same axis.
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              DhikrReadingCard(
+                name: widget.zikir.name,
+                arabic: widget.zikir.arabic,
+                transliteration: widget.zikir.transliteration,
+                meaning: widget.zikir.meaning,
+                contextNote: widget.zikir.recommendation,
+              ),
+              if (widget.allowTargetEditing) ...[
                 const SizedBox(height: 20),
-                Text(
-                  complete
-                      ? 'Alhamdulillah! Completed.'
-                      : _target == null
-                      ? 'Keep your heart present'
-                      : '${_target! - _count} remaining',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: secondaryInk, fontSize: 15),
+                DhikrTargetChoices(
+                  target: _target,
+                  onChanged: _changeTarget,
+                  enabled: !_isLoading,
                 ),
-                if (complete) ...[
-                  const SizedBox(height: 8),
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      if (!_continuing)
-                        TextButton(
-                          onPressed: () => setState(() => _continuing = true),
-                          child: const Text('Continue counting'),
-                        ),
-                      if (widget.onNext != null)
-                        FilledButton.icon(
-                          onPressed: () => _complete(next: true),
-                          icon: const Icon(Icons.arrow_forward, size: 20),
-                          label: const Text('Next dhikr'),
-                        ),
-                      TextButton(
-                        onPressed: _complete,
-                        child: const Text('Done'),
-                      ),
-                    ],
+              ],
+              const SizedBox(height: 24),
+              CounterSurface(
+                count: _count,
+                target: _target,
+                loading: _isLoading,
+                label: widget.zikir.name,
+                onTap: _isLoading ? null : _increment,
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 16,
+                runSpacing: 4,
+                children: [
+                  TextButton.icon(
+                    onPressed: _canUndo ? _undo : null,
+                    icon: const Icon(Icons.undo, size: 20),
+                    label: const Text('Undo'),
+                  ),
+                  TextButton.icon(
+                    onPressed: _isLoading ? null : _resetCount,
+                    icon: const Icon(Icons.refresh, size: 20),
+                    label: const Text('Reset count'),
                   ),
                 ],
-                const SizedBox(height: 12),
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 24,
+              ),
+              const FeedbackControls(),
+              const SizedBox(height: 16),
+              // Reserve the actual wrapped/scaled action layout, not a fixed
+              // height. No content above this section moves at the milestone.
+              Visibility(
+                visible: complete,
+                maintainSize: true,
+                maintainState: true,
+                maintainAnimation: true,
+                child: Column(
+                  key: const ValueKey('completion-section'),
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    TextButton.icon(
-                      onPressed: _canUndo ? _undo : null,
-                      icon: const Icon(Icons.undo, size: 20),
-                      label: const Text('Undo'),
+                    const Text(
+                      'Alhamdulillah! Completed.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: primaryGreen,
+                        fontWeight: FontWeight.bold,
+                        height: 1.5,
+                      ),
                     ),
-                    TextButton.icon(
-                      onPressed: _isLoading ? null : _resetCount,
-                      icon: const Icon(Icons.refresh, size: 20),
-                      label: const Text('Reset count'),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 12,
+                      runSpacing: 8,
+                      children: [
+                        if (widget.onNext != null)
+                          FilledButton.icon(
+                            onPressed: () => _complete(next: true),
+                            icon: const Icon(Icons.arrow_forward, size: 20),
+                            label: const Text('Next dhikr'),
+                          ),
+                        TextButton(
+                          onPressed: _complete,
+                          child: const Text('Done'),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                const FeedbackControls(),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

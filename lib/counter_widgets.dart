@@ -1,5 +1,3 @@
-import 'dart:ui' show FontFeature;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,6 +16,7 @@ Future<bool> confirmAction(
     await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
         title: Text(title),
         content: Text(message),
         actions: [
@@ -182,6 +181,9 @@ class FeedbackControls extends StatelessWidget {
         spacing: 8,
         children: [
           TextButton.icon(
+            style: TextButton.styleFrom(
+              textStyle: const TextStyle(fontFamily: 'Lato', fontSize: 13),
+            ),
             onPressed: () => feedback.toggle(isSound: true),
             icon: Icon(
               feedback.sound
@@ -192,6 +194,9 @@ class FeedbackControls extends StatelessWidget {
             label: Text('Sound ${feedback.sound ? 'on' : 'off'}'),
           ),
           TextButton.icon(
+            style: TextButton.styleFrom(
+              textStyle: const TextStyle(fontFamily: 'Lato', fontSize: 13),
+            ),
             onPressed: () => feedback.toggle(isSound: false),
             icon: Icon(
               feedback.vibration
@@ -282,96 +287,111 @@ class CounterSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final diameter = constraints.maxWidth.clamp(0.0, 264.0);
-      return SizedBox(
-        width: diameter,
-        height: diameter,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            if (target != null && target! > 0)
-              Positioned.fill(
-                child: ExcludeSemantics(
-                  child: CircularProgressIndicator(
-                    value: (count / target!).clamp(0.0, 1.0),
-                    strokeWidth: 3,
-                    backgroundColor: const Color(0xFFD8E2D7),
-                    color: const Color(0xFFB6873D),
+      final diameter = constraints.maxWidth.clamp(0.0, 232.0);
+      return Center(
+        child: SizedBox(
+          key: const ValueKey('counter-circle'),
+          width: diameter,
+          height: diameter,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              if (target != null && target! > 0)
+                Positioned.fill(
+                  child: ExcludeSemantics(
+                    child: CircularProgressIndicator(
+                      value: (count / target!).clamp(0.0, 1.0),
+                      strokeWidth: 3,
+                      backgroundColor: const Color(0xFFD8E2D7),
+                      color: const Color(0xFFB6873D),
+                    ),
                   ),
                 ),
-              ),
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: Semantics(
-                button: true,
-                label:
-                    '$label, count $count${target == null ? ', free count' : ', target $target'}',
-                child: Material(
-                  color: primaryGreen,
-                  shape: const CircleBorder(
-                    side: BorderSide(color: Color(0xFFB98A5A)),
-                  ),
-                  elevation: 2,
-                  shadowColor: const Color(0x33193C35),
-                  child: InkWell(
-                    onTap: onTap,
-                    customBorder: const CircleBorder(),
-                    splashFactory: MediaQuery.disableAnimationsOf(context)
-                        ? NoSplash.splashFactory
-                        : InkRipple.splashFactory,
-                    child: SizedBox.expand(
-                      child: ExcludeSemantics(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                              ),
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: Semantics(
+                  button: true,
+                  label:
+                      '$label, count $count${target == null ? ', free count' : ', target $target'}',
+                  child: Material(
+                    color: primaryGreen,
+                    shape: const CircleBorder(
+                      side: BorderSide(color: Color(0xFFB98A5A)),
+                    ),
+                    elevation: 2,
+                    shadowColor: const Color(0x33193C35),
+                    child: InkWell(
+                      onTap: onTap,
+                      customBorder: const CircleBorder(),
+                      splashFactory: MediaQuery.disableAnimationsOf(context)
+                          ? NoSplash.splashFactory
+                          : InkRipple.splashFactory,
+                      child: SizedBox.expand(
+                        child: ExcludeSemantics(
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
                               child: SizedBox(
-                                height: 76,
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    loading ? '…' : '$count',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 64,
-                                      height: 1.1,
-                                      fontWeight: FontWeight.bold,
-                                      fontFeatures: [
-                                        FontFeature.tabularFigures(),
-                                      ],
+                                width: 200,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 20,
+                                      ),
+                                      child: SizedBox(
+                                        height: 76,
+                                        child: FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          child: Text(
+                                            loading ? '…' : '$count',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 64,
+                                              height: 1.1,
+                                              fontWeight: FontWeight.bold,
+                                              fontFeatures: [
+                                                FontFeature.tabularFigures(),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                  ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      target == null
+                                          ? 'Free count'
+                                          : 'of $target',
+                                      style: const TextStyle(
+                                        color: Color(0xFFF7F3EA),
+                                        fontSize: 17,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 14),
+                                    const Text(
+                                      'Tap to count',
+                                      style: TextStyle(
+                                        color: Color(0xFFDDE9DF),
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              target == null ? 'Free count' : 'of $target',
-                              style: const TextStyle(
-                                color: Color(0xFFF7F3EA),
-                                fontSize: 17,
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-                            const Text(
-                              'Tap to count',
-                              style: TextStyle(
-                                color: Color(0xFFDDE9DF),
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     },
@@ -393,14 +413,16 @@ class ReadingText extends StatelessWidget {
     children: [
       Text(
         arabic,
-        textDirection: TextDirection.rtl,
+        textDirection: readingDirection(arabic),
         textAlign: TextAlign.center,
-        style: const TextStyle(
+        style: TextStyle(
           color: primaryGreen,
           fontSize: 28,
           height: 1.65,
-          fontFamily: 'KFGQPC Uthmanic Script HAFS',
-          fontFamilyFallback: ['Uthmanic Hafs', 'Noto Naskh Arabic'],
+          fontFamily: readingDirection(arabic) == TextDirection.rtl
+              ? 'NotoNaskhArabic'
+              : 'Lato',
+          fontFamilyFallback: ['Lato'],
         ),
       ),
       if (transliteration != null) ...[
@@ -429,5 +451,126 @@ class ReadingText extends StatelessWidget {
         ),
       ],
     ],
+  );
+}
+
+TextDirection readingDirection(String text) =>
+    RegExp(r'[\u0600-\u06ff]').hasMatch(text)
+    ? TextDirection.rtl
+    : TextDirection.ltr;
+
+/// Long readings scroll independently to keep counting controls within reach.
+class BoundedReading extends StatefulWidget {
+  const BoundedReading({
+    super.key,
+    required this.arabic,
+    this.transliteration,
+    this.meaning,
+  });
+  final String arabic;
+  final String? transliteration;
+  final String? meaning;
+  @override
+  State<BoundedReading> createState() => _BoundedReadingState();
+}
+
+class _BoundedReadingState extends State<BoundedReading> {
+  final _scroll = ScrollController();
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reading = ReadingText(
+      arabic: widget.arabic,
+      transliteration: widget.transliteration,
+      meaning: widget.meaning,
+    );
+    if (widget.arabic.length < 180) return reading;
+    return Column(
+      children: [
+        const Text(
+          'Scroll to read the full verse',
+          style: TextStyle(color: secondaryInk, fontSize: 13),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: (MediaQuery.sizeOf(context).height * .3).clamp(120.0, 260.0),
+          child: Scrollbar(
+            controller: _scroll,
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              controller: _scroll,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: reading,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A compact reading surface; long passages retain their full font size.
+class DhikrReadingCard extends StatelessWidget {
+  const DhikrReadingCard({
+    super.key,
+    required this.name,
+    required this.arabic,
+    this.transliteration,
+    this.meaning,
+    this.contextNote,
+  });
+  final String name;
+  final String arabic;
+  final String? transliteration;
+  final String? meaning;
+  final String? contextNote;
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: const Color(0xFFFCFAF5),
+      border: Border.all(color: const Color(0xFFD6DED3)),
+      borderRadius: BorderRadius.circular(18),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            name,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: inkGreen,
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 8),
+          BoundedReading(
+            arabic: arabic,
+            transliteration: transliteration,
+            meaning: meaning,
+          ),
+          if (contextNote != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              contextNote!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: secondaryInk,
+                fontSize: 12,
+                height: 1.5,
+              ),
+            ),
+          ],
+        ],
+      ),
+    ),
   );
 }

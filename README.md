@@ -76,3 +76,11 @@ dart run flutter_launcher_icons
 - [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
 - [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
 - [Flutter documentation](https://docs.flutter.dev/)
+
+## Local UI review
+
+English typography uses bundled Lato; Arabic uses Noto Naskh Arabic. Font
+licenses and provenance are in [assets/fonts/README.md](assets/fonts/README.md).
+See [the local review](docs/LOCAL_REVIEW.md) for validation, platform limits,
+and before/after screenshots, and [content sources](docs/CONTENT_SOURCES.md)
+for reading references and qualifications.
